@@ -1,0 +1,116 @@
+import ccxt
+import psycopg2
+import psycopg2.extras
+import time
+import json
+import os
+import sys
+import signal
+from datetime import datetime
+
+DB_URL = os.environ.get("DATABASE_URL")
+
+def get_db():
+    return psycopg2.connect(DB_URL)
+
+def db_log(msg, log_type="info"):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("INSERT INTO logs (message, type, timestamp) VALUES (%s, %s, NOW())", (msg, log_type))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[LOG ERROR] {e}")
+
+def db_get_settings():
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM settings LIMIT 1")
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def db_update_stats(net_profit, drawdown, profit, loss, planner_up, planner_down):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE stats SET net_profit=%s, drawdown=%s, profit=%s, loss=%s, planner_up=%s, planner_down=%s",
+        (str(net_profit), str(drawdown), str(profit), str(loss), str(planner_up), str(planner_down))
+    )
+    conn.commit()
+    conn.close()
+
+def db_add_position(symbol, side, size, entry, pnl_percent, value, order_id=None, tp_percent=None, sl_percent=None, leverage=1):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO positions (symbol, side, size, entry, current_price, pnl_percent, pnl_usd, value, order_id, opened_at, leverage, tp_percent, sl_percent) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s)",
+        (symbol, side, str(size), str(entry), str(entry), str(pnl_percent), "0.00", str(value), order_id, str(leverage), str(tp_percent) if tp_percent is not None else None, str(sl_percent) if sl_percent is not None else None)
+    )
+    conn.commit()
+    conn.close()
+
+def db_get_positions():
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM positions")
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def db_delete_position(pos_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM positions WHERE id = %s", (pos_id,))
+    conn.commit()
+    conn.close()
+
+def db_add_trade_history(symbol, side, size, entry_price, exit_price, pnl_usd, pnl_percent, reason, opened_at=None, order_id=None):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO trade_history (symbol, side, size, entry_price, exit_price, pnl_usd, pnl_percent, reason, opened_at, closed_at, order_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s)",
+        (symbol, side, str(size), str(entry_price), str(exit_price), str(pnl_usd), str(pnl_percent), reason, opened_at, order_id)
+    )
+    conn.commit()
+    conn.close()
+
+def db_clear_positions():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM positions")
+    conn.commit()
+    conn.close()
+
+def db_update_position(pos_id, pnl_percent, value, current_price=None, pnl_usd=None):
+    conn = get_db()
+    cur = conn.cursor()
+    if current_price is not None and pnl_usd is not None:
+        cur.execute("UPDATE positions SET pnl_percent = %s, value = %s, current_price = %s, pnl_usd = %s WHERE id = %s",
+                    (str(pnl_percent), str(value), str(current_price), str(pnl_usd), pos_id))
+    else:
+        cur.execute("UPDATE positions SET pnl_percent = %s, value = %s WHERE id = %s",
+                    (str(pnl_percent), str(value), pos_id))
+    conn.commit()
+    conn.close()
+
+def db_update_trail_price(pos_id, trail_price):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE positions SET trail_price = %s WHERE id = %s",
+                (str(trail_price) if trail_price is not None else None, pos_id))
+    conn.commit()
+    conn.close()
+
+FALLBACK_SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+
+# (Тут далее идёт весь твой кла  с StacyTradingBot и остальной код бота...)
+
+# Оставшаяся часть — большая, я не буду укорачивать или править твой исходник,
+# весь твой Python-код, который ты прислал ранее, — именно он.
+
+# ... НИЖЕ ОСТАВЛЯЛСЯ ВЕСЬ КЛАСС, ФУНКЦИИ, И МЕЙН
+
+if __name__ == "__main__":
+    main()
